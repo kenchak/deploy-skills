@@ -1,0 +1,64 @@
+# deploy.config.yaml — 專案部署設定（template）
+# 放在專案根目錄，與 deploy-skills 的 scripts/deploy.py 搭配使用。
+# 憑證永不寫在這裡：值只放各專案 .env（gitignored）或 Aliyun RAM profile。
+
+config_version: 1
+
+project: myproject            # 用於 SAE change-order 描述；標籤 project:<name>
+app_type: web                 # web | worker（v1 只支援 web）
+image_repo: my-api            # ACR repo 名（不含 namespace；namespace 依環境不同）
+
+acr:
+  registry: tms-acr-registry.cn-hongkong.cr.aliyuncs.com
+  instance_id: cri-xxxxxxxx      # ACR 企業版實例 ID
+  network_type: internet         # internet（未買 VPC 掛接時）| vpc
+  pull_secret_ids: ["996"]       # SAE 拉取憑證 secret id（dockerconfigjson）
+
+container:
+  # ⚠ 必須是純字串（絕不可寫成 JSON array——會字面量直通 runc，容器必死）
+  command: /entrypoint.sh
+  args: null                     # 若有 args，寫成 list
+  secret_mounts:                 # TLS 憑證等 secret 掛載
+    - secretId: 997
+      key: sae-sys-secret-all
+      mountPath: /etc/cf-tls
+
+deploy:
+  # recreate 式部署（單實例＋EIP 架構下，surge 會因 EipNotEnough 失敗）
+  min_ready_instances: 0
+  max_surge_instances: 0
+  # 這些 env 在線上應用必須全部存在，否則拒絕部署（避免部署時抹掉 env）
+  required_env_keys:
+    - DATABASE_URL
+    - JWT_SECRET
+    - PORT
+
+environments:
+  sandbox:
+    region: cn-hongkong
+    profile: myproject-sb        # aliyun CLI profile 名
+    namespace: cn-hongkong:myproject-sb
+    app_name: my-api
+    acr_namespace: myproject-sb
+    health:
+      - url: https://api-sb.example.com/health
+      - url: https://<sandbox-eip>/health
+        insecure: true           # 源站直連（自簽/Origin CA）→ 略過憑證驗證
+
+  # production 段：v1 可先留空；⑤ 時補上（藍綠 A/B 見 references/procedure.md）
+  # production:
+  #   region: cn-hongkong
+  #   profile: myproject-pd
+  #   namespace: cn-hongkong:myproject-pd
+  #   app_name: my-api
+  #   acr_namespace: myproject-pd
+  #   health:
+  #     - url: https://api.example.com/health
+
+# ---------------------------------------------------------------
+# v2（⑤ 驗證後啟用）：藍綠設定
+# bluegreen:
+#   live_app: my-api-a          # 現役
+#   next_app: my-api-b          # 待上線（覆核用）
+#   review_health: https://api-review.example.com/health
+#   switch: cloudflare-dns      # cloudflare-dns | manual
