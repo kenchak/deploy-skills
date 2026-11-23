@@ -427,10 +427,10 @@ def cmd_logs(ctx: Ctx, previous: bool) -> int:
         return 1
     iid = inst[0].get("InstanceId")
     step(f"實例 {iid} 日誌{'（previous）' if previous else ''}")
-    args = ["aliyun", "sae", "describe-instance-log", "--instance-id", iid]
+    cli_args = ["describe-instance-log", "--instance-id", iid]
     if previous:
-        args += ["--previous", "true"]
-    out = ctx.cli(*args[2:])  # keep region/profile
+        cli_args += ["--previous", "true"]
+    out = ctx.cli("sae", *cli_args)
     d = jloads(out)
     text = (d or {}).get("Data") if isinstance(d, dict) else None
     log((text or "(空日誌)")[:4000])
